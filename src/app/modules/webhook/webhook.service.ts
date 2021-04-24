@@ -1,4 +1,5 @@
 import axios from 'axios'
+import Bluebird from 'bluebird'
 import { get } from 'lodash'
 import mongoose from 'mongoose'
 import { errAsync, okAsync, ResultAsync } from 'neverthrow'
@@ -8,6 +9,7 @@ import {
   ISubmissionSchema,
   IWebhookResponse,
 } from '../../../types'
+import { aws as AwsConfig } from '../../config/config'
 import formsgSdk from '../../config/formsg-sdk'
 import { createLoggerWithLabel } from '../../config/logger'
 import { getEncryptSubmissionModel } from '../../models/submission.server.model'
@@ -88,6 +90,18 @@ export const sendWebhook = (
     epoch: now,
   })
 
+  // Generate S3 signed urls
+  const signedUrlPromises: Record<string, Promise<string>> = {}
+  if (submissionWebhookView.data.attachmentDownloadUrls) {
+    for (const key in submissionWebhookView.data.attachmentDownloadUrls) {
+      signedUrlPromises[key] = AwsConfig.s3.getSignedUrlPromise('getObject', {
+        Bucket: AwsConfig.attachmentS3Bucket,
+        Key: submissionWebhookView.data.attachmentDownloadUrls[key],
+        Expires: 60 * 60, // one hour expiry
+      })
+    }
+  }
+
   const logMeta = {
     action: 'sendWebhook',
     submissionId,
@@ -97,81 +111,91 @@ export const sendWebhook = (
     signature,
   }
 
-  return ResultAsync.fromPromise(validateWebhookUrl(webhookUrl), (error) => {
+  return ResultAsync.fromPromise(Bluebird.props(signedUrlPromises), (error) => {
     logger.error({
-      message: 'Webhook URL failed validation',
+      message: 'S3 attachment presigned URL generation failed',
       meta: logMeta,
       error,
     })
-    return error instanceof WebhookValidationError
-      ? error
-      : new WebhookValidationError()
-  })
-    .andThen(() =>
-      ResultAsync.fromPromise(
-        axios.post<unknown>(webhookUrl, submissionWebhookView, {
-          headers: {
-            'X-FormSG-Signature': formsgSdk.webhooks.constructHeader({
-              epoch: now,
-              submissionId,
-              formId,
-              signature,
-            }),
-          },
-          maxRedirects: 0,
-        }),
-        (error) => {
-          logger.error({
-            message: 'Webhook POST failed',
-            meta: {
-              ...logMeta,
-              isAxiosError: axios.isAxiosError(error),
-              status: get(error, 'response.status'),
-            },
-            error,
-          })
-          if (axios.isAxiosError(error)) {
-            return new WebhookFailedWithAxiosError(error)
-          }
-          return new WebhookFailedWithUnknownError(error)
-        },
-      ),
-    )
-    .map((response) => {
-      // Capture response for logging purposes
-      logger.info({
-        message: 'Webhook POST succeeded',
-        meta: {
-          ...logMeta,
-          status: get(response, 'status'),
-        },
+    return new WebhookFailedWithUnknownError(error)
+  }).andThen((signedUrls) => {
+    submissionWebhookView.data.attachmentDownloadUrls = signedUrls
+    return ResultAsync.fromPromise(validateWebhookUrl(webhookUrl), (error) => {
+      logger.error({
+        message: 'Webhook URL failed validation',
+        meta: logMeta,
+        error,
       })
-      return {
-        signature,
-        webhookUrl,
-        response: formatWebhookResponse(response),
-      }
+      return error instanceof WebhookValidationError
+        ? error
+        : new WebhookValidationError()
     })
-    .orElse((error) => {
-      // Webhook was not posted
-      if (error instanceof WebhookValidationError) return errAsync(error)
+      .andThen(() =>
+        ResultAsync.fromPromise(
+          axios.post<unknown>(webhookUrl, submissionWebhookView, {
+            headers: {
+              'X-FormSG-Signature': formsgSdk.webhooks.constructHeader({
+                epoch: now,
+                submissionId,
+                formId,
+                signature,
+              }),
+            },
+            maxRedirects: 0,
+          }),
+          (error) => {
+            logger.error({
+              message: 'Webhook POST failed',
+              meta: {
+                ...logMeta,
+                isAxiosError: axios.isAxiosError(error),
+                status: get(error, 'response.status'),
+              },
+              error,
+            })
+            if (axios.isAxiosError(error)) {
+              return new WebhookFailedWithAxiosError(error)
+            }
+            return new WebhookFailedWithUnknownError(error)
+          },
+        ),
+      )
+      .map((response) => {
+        // Capture response for logging purposes
+        logger.info({
+          message: 'Webhook POST succeeded',
+          meta: {
+            ...logMeta,
+            status: get(response, 'status'),
+          },
+        })
+        return {
+          signature,
+          webhookUrl,
+          response: formatWebhookResponse(response),
+        }
+      })
+      .orElse((error) => {
+        // Webhook was not posted
+        if (error instanceof WebhookValidationError) return errAsync(error)
 
-      // Webhook was posted but failed
-      if (error instanceof WebhookFailedWithUnknownError) {
+        // Webhook was posted but failed
+        if (error instanceof WebhookFailedWithUnknownError) {
+          return okAsync({
+            signature,
+            webhookUrl,
+            // Not Axios error so no guarantee of having response.
+            // Hence allow formatting function to return default shape.
+            response: formatWebhookResponse(),
+          })
+        }
+
+        const axiosError = error.meta.originalError
         return okAsync({
           signature,
           webhookUrl,
-          // Not Axios error so no guarantee of having response.
-          // Hence allow formatting function to return default shape.
-          response: formatWebhookResponse(),
+          response: formatWebhookResponse(axiosError.response),
         })
-      }
-
-      const axiosError = error.meta.originalError
-      return okAsync({
-        signature,
-        webhookUrl,
-        response: formatWebhookResponse(axiosError.response),
       })
-    })
+  })
 }
