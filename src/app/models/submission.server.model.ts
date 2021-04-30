@@ -182,12 +182,9 @@ const EncryptSubmissionSchema = new Schema<
 EncryptSubmissionSchema.methods.getWebhookView = function (
   this: IEncryptedSubmissionSchema,
 ): WebhookView {
-  const attachmentRecords: Record<string, string> = {}
-  if (this.attachmentMetadata) {
-    for (const [k, v] of this.attachmentMetadata) {
-      attachmentRecords[k] = v
-    }
-  }
+  const attachmentRecords = Object.fromEntries(
+    this.attachmentMetadata ?? new Map(),
+  )
 
   const webhookData: WebhookData = {
     formId: String(this.form),

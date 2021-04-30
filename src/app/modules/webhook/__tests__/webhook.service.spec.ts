@@ -3,6 +3,7 @@ import { ObjectID } from 'bson'
 import mongoose from 'mongoose'
 import { mocked } from 'ts-jest/utils'
 
+import { aws as AwsConfig } from 'src/app/config/config'
 import formsgSdk from 'src/app/config/formsg-sdk'
 import getFormModel from 'src/app/models/form.server.model'
 import { getEncryptSubmissionModel } from 'src/app/models/submission.server.model'
@@ -112,13 +113,16 @@ describe('webhook.service', () => {
       publicKey: 'fake-public-key',
     })
 
-    // initialise encrypted submussion
+    // initialise encrypted submission
+    const attachmentMetadata = new Map<string, string>()
+    attachmentMetadata.set('some-field-id', 'some/s3/url')
     testEncryptedSubmission = await EncryptSubmissionModel.create({
       form: testEncryptedForm._id,
       authType: testEncryptedForm.authType,
       myInfoFields: [],
       encryptedContent: 'encrypted-content',
       verifiedContent: 'verified-content',
+      attachmentMetadata,
       version: 1,
       webhookResponses: [],
     })
@@ -132,6 +136,18 @@ describe('webhook.service', () => {
       formId: testEncryptedForm._id,
       epoch: MOCK_EPOCH,
     })
+
+    // Mock the S3 get signed url call
+    jest
+      .spyOn(AwsConfig.s3, 'getSignedUrlPromise')
+      .mockImplementation((_operation, params) => {
+        return Promise.resolve(
+          `https://mock.s3.url/${params.Key}/timeout=${params.Expires}`,
+        )
+      })
+    testSubmissionWebhookView.data.attachmentDownloadUrls = {
+      'some-field-id': 'https://mock.s3.url/some/s3/url/timeout=3600',
+    }
 
     testConfig = {
       headers: {

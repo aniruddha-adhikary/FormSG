@@ -19,6 +19,7 @@ import { SubmissionNotFoundError } from '../submission/submission.errors'
 
 import {
   WebhookFailedWithAxiosError,
+  WebhookFailedWithPresignedUrlGenerationError,
   WebhookFailedWithUnknownError,
   WebhookValidationError,
 } from './webhook.errors'
@@ -77,6 +78,7 @@ export const sendWebhook = (
   IWebhookResponse,
   | WebhookValidationError
   | WebhookFailedWithAxiosError
+  | WebhookFailedWithPresignedUrlGenerationError
   | WebhookFailedWithUnknownError
 > => {
   const now = Date.now()
@@ -92,14 +94,12 @@ export const sendWebhook = (
 
   // Generate S3 signed urls
   const signedUrlPromises: Record<string, Promise<string>> = {}
-  if (submissionWebhookView.data.attachmentDownloadUrls) {
-    for (const key in submissionWebhookView.data.attachmentDownloadUrls) {
-      signedUrlPromises[key] = AwsConfig.s3.getSignedUrlPromise('getObject', {
-        Bucket: AwsConfig.attachmentS3Bucket,
-        Key: submissionWebhookView.data.attachmentDownloadUrls[key],
-        Expires: 60 * 60, // one hour expiry
-      })
-    }
+  for (const key in submissionWebhookView.data.attachmentDownloadUrls) {
+    signedUrlPromises[key] = AwsConfig.s3.getSignedUrlPromise('getObject', {
+      Bucket: AwsConfig.attachmentS3Bucket,
+      Key: submissionWebhookView.data.attachmentDownloadUrls[key],
+      Expires: 60 * 60, // one hour expiry
+    })
   }
 
   const logMeta = {
@@ -111,27 +111,30 @@ export const sendWebhook = (
     signature,
   }
 
-  return ResultAsync.fromPromise(Bluebird.props(signedUrlPromises), (error) => {
+  return ResultAsync.fromPromise(validateWebhookUrl(webhookUrl), (error) => {
     logger.error({
-      message: 'S3 attachment presigned URL generation failed',
+      message: 'Webhook URL failed validation',
       meta: logMeta,
       error,
     })
-    return new WebhookFailedWithUnknownError(error)
-  }).andThen((signedUrls) => {
-    submissionWebhookView.data.attachmentDownloadUrls = signedUrls
-    return ResultAsync.fromPromise(validateWebhookUrl(webhookUrl), (error) => {
-      logger.error({
-        message: 'Webhook URL failed validation',
-        meta: logMeta,
-        error,
-      })
-      return error instanceof WebhookValidationError
-        ? error
-        : new WebhookValidationError()
-    })
-      .andThen(() =>
-        ResultAsync.fromPromise(
+    return error instanceof WebhookValidationError
+      ? error
+      : new WebhookValidationError()
+  }).andThen(() => {
+    return ResultAsync.fromPromise(
+      Bluebird.props(signedUrlPromises),
+      (error) => {
+        logger.error({
+          message: 'S3 attachment presigned URL generation failed',
+          meta: logMeta,
+          error,
+        })
+        return new WebhookFailedWithPresignedUrlGenerationError(error)
+      },
+    )
+      .andThen((signedUrls) => {
+        submissionWebhookView.data.attachmentDownloadUrls = signedUrls
+        return ResultAsync.fromPromise(
           axios.post<unknown>(webhookUrl, submissionWebhookView, {
             headers: {
               'X-FormSG-Signature': formsgSdk.webhooks.constructHeader({
@@ -158,8 +161,8 @@ export const sendWebhook = (
             }
             return new WebhookFailedWithUnknownError(error)
           },
-        ),
-      )
+        )
+      })
       .map((response) => {
         // Capture response for logging purposes
         logger.info({
@@ -178,6 +181,8 @@ export const sendWebhook = (
       .orElse((error) => {
         // Webhook was not posted
         if (error instanceof WebhookValidationError) return errAsync(error)
+        if (error instanceof WebhookFailedWithPresignedUrlGenerationError)
+          return errAsync(error)
 
         // Webhook was posted but failed
         if (error instanceof WebhookFailedWithUnknownError) {
