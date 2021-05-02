@@ -8,6 +8,7 @@ import {
   IEncryptedSubmissionSchema,
   ISubmissionSchema,
   IWebhookResponse,
+  WebhookView,
 } from '../../../types'
 import { aws as AwsConfig } from '../../config/config'
 import formsgSdk from '../../config/formsg-sdk'
@@ -71,6 +72,25 @@ export const saveWebhookRecord = (
   })
 }
 
+const createWebhookSubmissionView = (
+  submissionWebhookView: WebhookView,
+): Promise<WebhookView> => {
+  // Generate S3 signed urls
+  const signedUrlPromises: Record<string, Promise<string>> = {}
+  for (const key in submissionWebhookView.data.attachmentDownloadUrls) {
+    signedUrlPromises[key] = AwsConfig.s3.getSignedUrlPromise('getObject', {
+      Bucket: AwsConfig.attachmentS3Bucket,
+      Key: submissionWebhookView.data.attachmentDownloadUrls[key],
+      Expires: 60 * 60, // one hour expiry
+    })
+  }
+
+  return Bluebird.props(signedUrlPromises).then((signedUrls) => {
+    submissionWebhookView.data.attachmentDownloadUrls = signedUrls
+    return submissionWebhookView
+  })
+}
+
 export const sendWebhook = (
   submission: IEncryptedSubmissionSchema,
   webhookUrl: string,
@@ -82,8 +102,8 @@ export const sendWebhook = (
   | WebhookFailedWithUnknownError
 > => {
   const now = Date.now()
-  const submissionWebhookView = submission.getWebhookView()
-  const { submissionId, formId } = submissionWebhookView.data
+  const rawSubmissionWebhookView = submission.getWebhookView()
+  const { submissionId, formId } = rawSubmissionWebhookView.data
 
   const signature = formsgSdk.webhooks.generateSignature({
     uri: webhookUrl,
@@ -91,16 +111,6 @@ export const sendWebhook = (
     formId,
     epoch: now,
   })
-
-  // Generate S3 signed urls
-  const signedUrlPromises: Record<string, Promise<string>> = {}
-  for (const key in submissionWebhookView.data.attachmentDownloadUrls) {
-    signedUrlPromises[key] = AwsConfig.s3.getSignedUrlPromise('getObject', {
-      Bucket: AwsConfig.attachmentS3Bucket,
-      Key: submissionWebhookView.data.attachmentDownloadUrls[key],
-      Expires: 60 * 60, // one hour expiry
-    })
-  }
 
   const logMeta = {
     action: 'sendWebhook',
@@ -122,7 +132,7 @@ export const sendWebhook = (
       : new WebhookValidationError()
   }).andThen(() => {
     return ResultAsync.fromPromise(
-      Bluebird.props(signedUrlPromises),
+      createWebhookSubmissionView(rawSubmissionWebhookView),
       (error) => {
         logger.error({
           message: 'S3 attachment presigned URL generation failed',
@@ -132,8 +142,7 @@ export const sendWebhook = (
         return new WebhookFailedWithPresignedUrlGenerationError(error)
       },
     )
-      .andThen((signedUrls) => {
-        submissionWebhookView.data.attachmentDownloadUrls = signedUrls
+      .andThen((submissionWebhookView) => {
         return ResultAsync.fromPromise(
           axios.post<unknown>(webhookUrl, submissionWebhookView, {
             headers: {
