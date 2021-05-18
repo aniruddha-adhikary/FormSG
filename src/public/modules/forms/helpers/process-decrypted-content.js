@@ -1,4 +1,4 @@
-const { SPCPFieldTitle } = require('../../../../types')
+const { SPCPFieldTitle, SgidFieldTitle } = require('../../../../types')
 const {
   CURRENT_VERIFIED_FIELDS,
   VerifiedKeys,
@@ -32,6 +32,14 @@ const getResponseFromVerifiedField = (type, value) => {
         fieldType: 'nric',
         answer: value,
         _id: SPCPFieldTitle.CpUid,
+      }
+    case VerifiedKeys.SgidUinFin:
+      return {
+        question: SgidFieldTitle.SgidNric,
+        fieldType: 'nric',
+        answer: value,
+        // Just a unique identifier for CSV header uniqueness
+        _id: SgidFieldTitle.SgidNric,
       }
     default:
       return null

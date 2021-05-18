@@ -70,6 +70,12 @@ services:
       - CORPPASS_IDP_ID
       - IS_SP_MAINTENANCE
       - IS_CP_MAINTENANCE
+      - SGID_ENDPOINT
+      - SGID_CLIENT_ID
+      - SGID_CLIENT_SECRET
+      - SGID_REDIRECT_URI
+      - SGID_PRIVATE_KEY
+      - SGID_PUBLIC_KEY
       - AGGREGATE_COLLECTION
 
   mockpass:

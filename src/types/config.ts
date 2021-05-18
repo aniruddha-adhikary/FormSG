@@ -56,6 +56,7 @@ export type Config = {
   db: DbConfig
   aws: AwsConfig
   mail: MailConfig
+  sgid: IOptionalVarsSchema['sgid']
 
   cookieSettings: SessionOptions['cookie']
   // Consts
@@ -131,6 +132,17 @@ export interface IOptionalVarsSchema {
   rateLimit: {
     submissions: number
     sendAuthOtp: number
+  }
+  sgid: {
+    endpoint: string
+    clientId: string
+    clientSecret: string
+    privateKey: string
+    publicKey: string
+    redirectUri: string
+    cookieMaxAge: number
+    cookieMaxAgePreserved: number
+    cookieDomain: string
   }
 }
 

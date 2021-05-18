@@ -29,6 +29,8 @@ import {
   extractAndAssertMyInfoCookieValidity,
   validateMyInfoForm,
 } from '../../myinfo/myinfo.util'
+import { sgidService } from '../../sgid/sgid.service'
+import { validateSgidForm } from '../../sgid/sgid.util'
 import { InvalidJwtError, VerifyJwtError } from '../../spcp/spcp.errors'
 import { SpcpFactory } from '../../spcp/spcp.factory'
 import { getRedirectTarget, validateSpcpForm } from '../../spcp/spcp.util'
@@ -354,6 +356,9 @@ export const handleGetPublicForm: ControllerHandler<
           })
       )
     }
+    case AuthType.SGID:
+      // Do nothing - JWT already in place, nothing to do for MyInfo
+      return res.json({ form: publicForm, isIntranetUser })
     default:
       return new UnreachableCaseError(authType)
   }
@@ -413,8 +418,11 @@ export const _handleFormAuthRedirect: ControllerHandler<
             )
           })
         }
-        // NOTE: Only MyInfo and SPCP should have redirects as the point of a redirect is
-        // to provide auth for users from a third party
+        case AuthType.SGID:
+          return validateSgidForm(form).andThen(() => {
+            const state = `${formId},${isPersistentLogin}`
+            return sgidService.createRedirectUrl(state)
+          })
         default:
           return err<never, AuthTypeMismatchError>(
             new AuthTypeMismatchError(form.authType),

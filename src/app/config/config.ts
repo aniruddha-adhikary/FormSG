@@ -206,6 +206,7 @@ const config: Config = {
   db: dbConfig,
   aws: awsConfig,
   mail: mailConfig,
+  sgid: basicVars.sgid,
   cookieSettings,
   isDev,
   nodeEnv,

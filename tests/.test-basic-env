@@ -13,6 +13,13 @@ ATTACHMENT_S3_BUCKET=local-attachment-bucket
 NODE_ENV=test
 FORMSG_SDK_MODE=test
 
+SGID_ENDPOINT=http://localhost:5156/sgid/v1/oauth
+SGID_CLIENT_ID=sgidclientid
+SGID_CLIENT_SECRET=sgidclientsecret
+SGID_REDIRECT_URI=http://localhost:5000/sgid/login
+SGID_PRIVATE_KEY=./node_modules/@opengovsg/mockpass/static/certs/key.pem
+SGID_PUBLIC_KEY=./node_modules/@opengovsg/mockpass/static/certs/server.crt
+
 AWS_ACCESS_KEY_ID=fakeAccessKeyId
 AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
 SESSION_SECRET=sandcrawler-138577
