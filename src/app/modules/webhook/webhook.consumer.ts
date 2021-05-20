@@ -118,7 +118,6 @@ const createWebhookQueueHandler = (producer: WebhookProducer) => async (
       message: 'Webhook queue message could not be parsed',
       meta: {
         action: 'createWebhookQueueHandler',
-        webhookMessageResult,
       },
       error: webhookMessageResult.error,
     })
