@@ -39,6 +39,10 @@ export const startWebhookConsumer = (
     queueUrl,
     region: config.aws.region,
     handleMessage: createWebhookQueueHandler(producer),
+    // By default, the default Node.js HTTP/HTTPS SQS agent
+    // creates a new TCP connection for every new request.
+    // In production, pass an SQS instance to avoid the cost
+    // of establishing new connections.
     sqs: config.isDev
       ? undefined
       : new aws.SQS({
