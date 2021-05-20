@@ -26,7 +26,7 @@ const updateSettingsValidator = celebrate({
     webhook: Joi.object({
       url: Joi.string().uri().allow(''),
       isRetryEnabled: Joi.boolean(),
-    }),
+    }).min(1),
   }).min(1),
 })
 
