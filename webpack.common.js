@@ -10,22 +10,17 @@ module.exports = [
     module: {
       rules: [
         {
-          test: /\.worker\.(j|t)s$/,
-          // Don't transpile polyfills
-          exclude: /@babel(?:\/|\\{1,2})runtime|core-js/,
+          test: /\.worker\.ts$/,
           use: [
             {
               loader: 'worker-loader',
               options: { publicPath: '/public/' },
             },
             {
-              loader: 'babel-loader',
-            },
-            {
               loader: 'ts-loader',
               options: {
                 // Use the tsconfig file specified for the worker rather than the project's tsconfig
-                configFile: './src/public/workers/tsconfig.json',
+                configFile: 'ts-worker-config.json',
               },
             },
           ],
@@ -33,6 +28,7 @@ module.exports = [
         {
           test: /\.ts$/,
           loader: 'ts-loader',
+          exclude: /\.worker\.ts$/,
           options: {
             configFile: 'ts-loader-config.json',
           },

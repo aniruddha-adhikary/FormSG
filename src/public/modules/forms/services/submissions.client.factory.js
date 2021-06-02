@@ -1,7 +1,9 @@
 'use strict'
 
 const CsvMHGenerator = require('../helpers/CsvMergedHeadersGenerator')
-const DecryptionWorker = require('../helpers/decryption.worker.js')
+const {
+  default: DecryptionWorker,
+} = require('../../../workers/decryption.worker')
 const { fixParamsToUrl, triggerFileDownload } = require('../helpers/util')
 const { ndjsonStream } = require('../helpers/ndjsonStream')
 const fetchStream = require('fetch-readablestream')
