@@ -233,8 +233,6 @@ function EditFieldsModalController(
   vm.clearCustomValidation = function (field) {
     field.ValidationOptions = {
       selectedValidation: null,
-      customMax: null,
-      customMin: null,
       customVal: null,
     }
   }
@@ -242,20 +240,9 @@ function EditFieldsModalController(
     let temp = field.ValidationOptions.selectedValidation
     // Reset all custom validation params to null, keep selected validation option
     field.ValidationOptions = {
-      customMax: null,
-      customMin: null,
       customVal: null,
       selectedValidation: temp,
     }
-  }
-
-  vm.changeFxn = function (field) {
-    let selected = field.ValidationOptions.selectedValidation
-    let val = field.ValidationOptions.customVal
-    field.ValidationOptions.customMax =
-      selected === 'Maximum' || selected === 'Exact' ? val : null
-    field.ValidationOptions.customMin =
-      selected === 'Minimum' || selected === 'Exact' ? val : null
   }
 
   vm.setFocus = function () {
