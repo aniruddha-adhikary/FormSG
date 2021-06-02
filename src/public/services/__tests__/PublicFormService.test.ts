@@ -171,11 +171,10 @@ describe('PublicFormService', () => {
         isIntranetUser: false,
         myInfoError: true,
       }
+      MockAxios.get.mockResolvedValueOnce({ data: expected })
 
       // Act
-      const actualPromise = getPublicFormView(MOCK_FORM_ID)
-      MockAxios.mockResponse({ data: expected })
-      const actual = await actualPromise
+      const actual = await getPublicFormView(MOCK_FORM_ID)
 
       // Assert
       expect(actual).toEqual(expected)
@@ -188,10 +187,10 @@ describe('PublicFormService', () => {
       // Arrange
       const MOCK_FORM_ID = 'mock-form-id'
       const expected = new Error('error')
+      MockAxios.get.mockRejectedValueOnce(expected)
 
       // Act
       const actualPromise = getPublicFormView(MOCK_FORM_ID)
-      MockAxios.mockError(expected)
 
       // Assert
       await expect(actualPromise).rejects.toEqual(expected)
