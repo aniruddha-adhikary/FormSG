@@ -29,20 +29,20 @@ jobs:
       script:
         - set -e
         - npm_config_mode=yes npx lockfile-lint --type npm --path package.json --validate-https --allowed-hosts npm
-        - npm run lint-ci
+        # - npm run lint-ci
         - npm run build
       workspaces:
         create:
           name: build
           paths: .
-    - stage: Tests
-      name: End-to-end tests
-      workspaces:
-        use: build
-      addons:
-        chrome: stable
-      script:
-        - npm run test-e2e-ci
+    # - stage: Tests
+    #   name: End-to-end tests
+    #   workspaces:
+    #     use: build
+    #   addons:
+    #     chrome: stable
+    #   script:
+    #     - npm run test-e2e-ci
     - stage: Deploy
       services:
         - docker
